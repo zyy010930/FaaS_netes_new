@@ -55,12 +55,12 @@ func MakeReplicaUpdater(defaultNamespace string, clientset *kubernetes.Clientset
 			}
 		}
 
-		if req.Replicas == 0 {
+	/*	if req.Replicas == 0 {
 			http.Error(w, "replicas cannot be set to 0 in OpenFaaS CE",
 				http.StatusBadRequest)
 			return
 		}
-
+*/
 		options := metav1.GetOptions{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Deployment",

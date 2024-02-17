@@ -95,7 +95,7 @@ func MakeDeployHandler(functionNamespace string, factory k8s.FunctionFactory, fu
 		for _, profile := range profileList {
 			factory.ApplyProfile(profile, deploymentSpec)
 		}
-
+/*
 		count, err := functionList.Count()
 		if err != nil {
 			err := fmt.Errorf("unable to count functions: %s", err.Error())
@@ -108,7 +108,7 @@ func MakeDeployHandler(functionNamespace string, factory k8s.FunctionFactory, fu
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
+*/
 		deploy := factory.Client.AppsV1().Deployments(namespace)
 		if _, err = deploy.Create(context.TODO(), deploymentSpec, metav1.CreateOptions{}); err != nil {
 			wrappedErr := fmt.Errorf("unable create Deployment: %s", err.Error())

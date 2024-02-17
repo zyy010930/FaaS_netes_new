@@ -41,7 +41,7 @@ spec:
             requests:
               cpu: 50m
               memory: 120Mi
-        image: ghcr.io/openfaas/gateway:0.27.3
+        image: zyy0930/gateway:v1.1.3
         imagePullPolicy: IfNotPresent
         command:
           - ./gateway
@@ -117,7 +117,7 @@ spec:
             requests:
               cpu: 50m
               memory: 120Mi
-        image: ghcr.io/openfaas/faas-netes:0.17.2
+        image: zyy0930/faas-netes:v1.0.2
         imagePullPolicy: IfNotPresent
         securityContext:
           readOnlyRootFilesystem: true
@@ -137,7 +137,7 @@ spec:
         - name: write_timeout
           value: "1m05s"
         - name: image_pull_policy
-          value: "Always"
+          value: "IfNotPresent"
         - name: http_probe
           value: "true"
         - name: set_nonroot_user
