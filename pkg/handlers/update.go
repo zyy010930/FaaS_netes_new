@@ -110,7 +110,7 @@ func updateDeploymentSpec(
 	if len(deployment.Spec.Template.Spec.Containers) > 0 {
 		deployment.Spec.Template.Spec.Containers[0].Image = request.Image
 
-		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullAlways
+		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
 
 		deployment.Spec.Template.Spec.Containers[0].Env = buildEnvVars(&request)
 
