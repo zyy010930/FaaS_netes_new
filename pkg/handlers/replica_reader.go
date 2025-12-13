@@ -34,6 +34,10 @@ func MakeReplicaReader(defaultNamespace string, lister v1.DeploymentLister) http
 		vars := mux.Vars(r)
 
 		functionName := vars["name"]
+		if functionName == "func2-ms" || functionName == "func3-ms" {
+			functionName = "multi-func-pod"
+		}
+		
 		q := r.URL.Query()
 		namespace := q.Get("namespace")
 
