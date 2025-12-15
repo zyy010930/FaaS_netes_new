@@ -92,8 +92,10 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 	target := rand.Intn(all)
 
 	serviceIP := svc.Subsets[0].Addresses[target].IP
+	port := svc.Subsets[0].Ports[target].Port
 
-	urlStr := fmt.Sprintf("http://%s:%d", serviceIP, watchdogPort)
+	// urlStr := fmt.Sprintf("http://%s:%d", serviceIP, watchdogPort)
+	urlStr := fmt.Sprintf("http://%s:%d", serviceIP, port)
 
 	urlRes, err := url.Parse(urlStr)
 	if err != nil {
