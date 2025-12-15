@@ -101,7 +101,7 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 	if err != nil {
 		return url.URL{}, err
 	}
-
+	log.Printf("Resolved function %s to %s", functionName, urlRes)
 	return *urlRes, nil
 }
 
