@@ -6,6 +6,7 @@ package k8s
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"net/url"
 	"strings"
@@ -74,6 +75,7 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 	}
 
 	svc, err := nsEndpointLister.Get(functionName)
+	log.Printf("function = %s, svc = %s", functionName, svc)
 	if err != nil {
 		return url.URL{}, fmt.Errorf("error listing \"%s.%s\": %s", functionName, namespace, err.Error())
 	}
