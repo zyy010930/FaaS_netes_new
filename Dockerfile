@@ -36,14 +36,12 @@ FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine:3.18.4 as ship
 #      org.label-schema.name="openfaas/faas-netes" \
 #      org.label-schema.vendor="openfaas" \
 #      org.label-schema.docker.schema-version="1.0"
-
-# ========== 关键修改1：替换Alpine国内源 ==========
-# 将默认源替换为阿里云镜像源，解决apk下载卡住的问题
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-
-# ========== 关键修改2：执行apk add（保留原有逻辑） ==========
-RUN apk --no-cache add \
-    ca-certificates
+# 替换原有apk命令为以下内容
+RUN apk --no-cache add ca-certificates \
+    --repository http://mirrors.aliyun.com/alpine/v3.18/main/ \
+    --repository http://mirrors.aliyun.com/alpine/v3.18/community/
+#RUN apk --no-cache add \
+#    ca-certificates
 
 RUN addgroup -S app \
     && adduser -S -g app app
