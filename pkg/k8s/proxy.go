@@ -104,6 +104,15 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 
 	// 2. 从状态管理器筛选空闲实例
 	idleInstances := l.instanceManager.ListIdleInstances(functionName, namespace)
+
+	// 2.0 无空闲实例：添加所有实例
+	if len(idleInstances) == 0 {
+		log.Printf("No idle instances found for function %s", functionName)
+		for i := 0; i < len(svc.Subsets[0].Addresses); i++ {
+			ip := svc.Subsets[0].Addresses[i].IP
+			l.instanceManager.AddInstance(functionName, namespace, ip)
+		}
+	}
 	var targetIP string
 	if len(idleInstances) > 0 {
 		// 2.1 有空闲实例：随机选一个
