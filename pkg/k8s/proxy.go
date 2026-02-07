@@ -6,6 +6,7 @@ package k8s
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"net/url"
 	"strings"
@@ -108,6 +109,7 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 		// 2.1 有空闲实例：随机选一个
 		targetIdx := rand.Intn(len(idleInstances))
 		targetIP = idleInstances[targetIdx].PodIP
+		log.Printf("Selected idle instance %s for function %s, len = %d", targetIP, functionName, len(idleInstances))
 		// 标记为忙碌（需在请求完成后重置，见步骤4）
 		l.instanceManager.UpdateInstanceState(functionName, namespace, targetIP, InstanceStateBusy)
 	} else {
@@ -125,6 +127,7 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 		return url.URL{}, err
 	}
 
+	log.Printf("Resolved function %s to %s", functionName, urlRes)
 	return *urlRes, nil
 }
 
