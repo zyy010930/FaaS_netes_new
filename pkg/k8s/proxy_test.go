@@ -50,7 +50,7 @@ func Test_FunctionLookup(t *testing.T) {
 
 	lister := FakeLister{}
 
-	resolver := NewFunctionLookup("testDefault", lister)
+	resolver := NewFunctionLookup("testDefault", lister, GlobalInstanceManager)
 
 	cases := []struct {
 		name     string

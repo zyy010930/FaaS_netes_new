@@ -21,7 +21,6 @@ import (
 	version "github.com/openfaas/faas-netes/version"
 	faasProvider "github.com/openfaas/faas-provider"
 	"github.com/openfaas/faas-provider/logs"
-	"github.com/openfaas/faas-provider/proxy"
 	providertypes "github.com/openfaas/faas-provider/types"
 
 	kubeinformers "k8s.io/client-go/informers"
@@ -195,11 +194,12 @@ func runController(setup serverSetup) {
 	listers := startInformers(setup, stopCh, operator)
 	handlers.RegisterEventHandlers(listers.DeploymentInformer, kubeClient, config.DefaultFunctionNamespace)
 	deployLister := listers.DeploymentInformer.Lister()
-	functionLookup := k8s.NewFunctionLookup(config.DefaultFunctionNamespace, listers.EndpointsInformer.Lister())
+	functionLookup := k8s.NewFunctionLookup(config.DefaultFunctionNamespace, listers.EndpointsInformer.Lister(), k8s.GlobalInstanceManager)
 	functionList := k8s.NewFunctionList(config.DefaultFunctionNamespace, deployLister)
 
 	bootstrapHandlers := providertypes.FaaSHandlers{
-		FunctionProxy:        proxy.NewHandlerFunc(config.FaaSConfig, functionLookup),
+		//FunctionProxy:        proxy.NewHandlerFunc(config.FaaSConfig, functionLookup),
+		FunctionProxy:        handlers.NewHandlerFunc(config.FaaSConfig, functionLookup),
 		DeleteHandler:        handlers.MakeDeleteHandler(config.DefaultFunctionNamespace, kubeClient),
 		DeployHandler:        handlers.MakeDeployHandler(config.DefaultFunctionNamespace, factory, functionList),
 		FunctionReader:       handlers.MakeFunctionReader(config.DefaultFunctionNamespace, deployLister),

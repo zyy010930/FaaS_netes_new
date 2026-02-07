@@ -5,14 +5,13 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"k8s.io/client-go/tools/cache"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"k8s.io/client-go/informers/internalinterfaces"
-
-	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -21,6 +20,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
+
+// 全局状态管理器（需在程序初始化时创建）
+var GlobalInstanceManager = NewInstanceStatusManager()
 
 const (
 	// podInformerResync is the period between cache syncs in the pod informer
@@ -165,8 +167,6 @@ func parseSince(r *time.Time) *int64 {
 	return &since
 }
 
-// startFunctionPodInformer will gather the list of existing Pods for the function, it will then watch
-// and watch for newly added or deleted function instances.
 func startFunctionPodInformer(ctx context.Context, client kubernetes.Interface, functionName, namespace string) (<-chan string, error) {
 	functionSelector := &metav1.LabelSelector{
 		MatchLabels: map[string]string{"faas_function": functionName},
@@ -193,7 +193,14 @@ func startFunctionPodInformer(ctx context.Context, client kubernetes.Interface, 
 		return nil, err
 	}
 
+	// 初始化现有Pod的状态为Idle
 	pods := podsResp.Items
+	for _, pod := range pods {
+		if pod.Status.PodIP != "" { // 确保Pod已分配IP
+			GlobalInstanceManager.AddInstance(functionName, namespace, pod.Status.PodIP)
+		}
+	}
+
 	if len(pods) == 0 {
 		err = errors.New("no matching instances found")
 		log.Printf("PodInformer: %s", err)
@@ -202,8 +209,13 @@ func startFunctionPodInformer(ctx context.Context, client kubernetes.Interface, 
 
 	// prepare channel with enough space for the current instance set
 	added := make(chan string, len(pods))
+	// 扩展EventHandler：监听Pod增删，同步状态
 	podInformer.Informer().AddEventHandler(&podLoggerEventHandler{
 		added: added,
+		// 新增：关联状态管理器
+		instanceManager: GlobalInstanceManager,
+		functionName:    functionName,
+		namespace:       namespace,
 	})
 
 	// will add existing pods to the chan and then listen for any new pods
@@ -216,20 +228,80 @@ func startFunctionPodInformer(ctx context.Context, client kubernetes.Interface, 
 	return added, nil
 }
 
+//// startFunctionPodInformer will gather the list of existing Pods for the function, it will then watch
+//// and watch for newly added or deleted function instances.
+//func startFunctionPodInformer(ctx context.Context, client kubernetes.Interface, functionName, namespace string) (<-chan string, error) {
+//	functionSelector := &metav1.LabelSelector{
+//		MatchLabels: map[string]string{"faas_function": functionName},
+//	}
+//	selector, err := metav1.LabelSelectorAsSelector(functionSelector)
+//	if err != nil {
+//		err = errors.Wrap(err, "unable to build function selector")
+//		log.Printf("PodInformer: %s", err)
+//		return nil, err
+//	}
+//
+//	log.Printf("PodInformer: starting informer for %s in: %s\n", selector.String(), namespace)
+//	factory := informers.NewFilteredSharedInformerFactory(
+//		client,
+//		podInformerResync,
+//		namespace,
+//		withLabels(selector.String()),
+//	)
+//
+//	podInformer := factory.Core().V1().Pods()
+//	podsResp, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String()})
+//	if err != nil {
+//		log.Printf("PodInformer: %s", err)
+//		return nil, err
+//	}
+//
+//	pods := podsResp.Items
+//	if len(pods) == 0 {
+//		err = errors.New("no matching instances found")
+//		log.Printf("PodInformer: %s", err)
+//		return nil, err
+//	}
+//
+//	// prepare channel with enough space for the current instance set
+//	added := make(chan string, len(pods))
+//	podInformer.Informer().AddEventHandler(&podLoggerEventHandler{
+//		added: added,
+//	})
+//
+//	// will add existing pods to the chan and then listen for any new pods
+//	go podInformer.Informer().Run(ctx.Done())
+//	go func() {
+//		<-ctx.Done()
+//		close(added)
+//	}()
+//
+//	return added, nil
+//}
+
 func withLabels(selector string) internalinterfaces.TweakListOptionsFunc {
 	return func(opts *metav1.ListOptions) {
 		opts.LabelSelector = selector
 	}
 }
 
+// 扩展podLoggerEventHandler，处理Pod增删事件
 type podLoggerEventHandler struct {
 	cache.ResourceEventHandler
 	added   chan<- string
 	deleted chan<- string
+
+	//新增：关联状态管理器，functionName，namespace
+	instanceManager *InstanceStatusManager
+	functionName    string
+	namespace       string
 }
 
 func (h *podLoggerEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 	pod := obj.(*corev1.Pod)
+	if pod.Status.PodIP != "" {
+		h.instanceManager.AddInstance(h.functionName, h.namespace, pod.Status.PodIP)
+	}
 	log.Printf("PodInformer: adding instance: %s", pod.Name)
 	h.added <- pod.Name
 }
