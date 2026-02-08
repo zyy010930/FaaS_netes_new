@@ -147,7 +147,7 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	for {
 		response, err = proxyClient.Do(proxyReq.WithContext(ctx))
 		log.Printf("response: %s\n", response)
-		if response == nil {
+		if response.StatusCode == http.StatusTooManyRequests {
 			log.Printf("function: %s too many requests\n", functionName)
 			time.Sleep(100 * time.Millisecond)
 			// 关闭当前响应体（避免内存泄漏）
