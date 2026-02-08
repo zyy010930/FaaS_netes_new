@@ -146,16 +146,36 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	var response *http.Response
 	for {
 		response, err = proxyClient.Do(proxyReq.WithContext(ctx))
-		log.Printf("response: %s\n", response)
+		log.Printf("response: %s, proxyReq: %s\n", response, proxyReq)
 		if response == nil {
 			log.Printf("response is nil\n")
 			time.Sleep(100 * time.Millisecond)
+			ctx = originalReq.Context()
+			proxyReq, err = buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+			if err != nil {
+				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+				return
+			}
+
+			if proxyReq.Body != nil {
+				defer proxyReq.Body.Close()
+			}
 			continue
 		} else if response.StatusCode == http.StatusTooManyRequests {
 			log.Printf("function: %s too many requests\n", functionName)
 			time.Sleep(100 * time.Millisecond)
 			// 关闭当前响应体（避免内存泄漏）
 			_ = response.Body.Close()
+			ctx = originalReq.Context()
+			proxyReq, err = buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+			if err != nil {
+				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+				return
+			}
+
+			if proxyReq.Body != nil {
+				defer proxyReq.Body.Close()
+			}
 			continue
 		} else {
 			break
