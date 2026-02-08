@@ -150,8 +150,6 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 		if response == nil {
 			log.Printf("response is nil\n")
 			time.Sleep(100 * time.Millisecond)
-			// 关闭当前响应体（避免内存泄漏）
-			_ = response.Body.Close()
 			continue
 		} else if response.StatusCode == http.StatusTooManyRequests {
 			log.Printf("function: %s too many requests\n", functionName)
