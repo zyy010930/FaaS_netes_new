@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"github.com/openfaas/faas-netes/pkg/k8s"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,6 +132,20 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 		return
 	}
 
+	// ===== 新增：读取原始 Body 并保存 =====
+	var reqBodyBytes []byte
+	var reqBodyErr error
+	// 读取 originalReq.Body 的内容（仅读取一次，保存为字节数组）
+	if originalReq.Body != nil {
+		reqBodyBytes, reqBodyErr = io.ReadAll(originalReq.Body)
+		if reqBodyErr != nil {
+			httputil.Errorf(w, http.StatusInternalServerError, "Failed to read request body: %s", functionName)
+			return
+		}
+		// 恢复 originalReq.Body（避免后续使用时为空）
+		originalReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+	}
+
 	proxyReq, err := buildProxyRequest(originalReq, functionAddr, pathVars["params"])
 	if err != nil {
 		httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
@@ -145,8 +161,17 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	// 处理429状态码：需要重试
 	var response *http.Response
 	for {
+		// 关键：每次重试前重置 Body 和 Content-Length
+		if len(reqBodyBytes) > 0 {
+			// 重新封装 Body（可多次读取）
+			proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+			// 恢复 Content-Length 头（关键！）
+			proxyReq.ContentLength = int64(len(reqBodyBytes))
+			proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
+		}
+
 		response, err = proxyClient.Do(proxyReq.WithContext(ctx))
-		log.Printf("response: %s, proxyReq: %s\n", response, proxyReq)
+		log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
 		if response == nil {
 			log.Printf("response is nil\n")
 			time.Sleep(100 * time.Millisecond)
@@ -154,6 +179,9 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 		} else if response.StatusCode == http.StatusTooManyRequests {
 			log.Printf("function: %s too many requests\n", functionName)
 			time.Sleep(100 * time.Millisecond)
+			if response.Body != nil {
+				_ = response.Body.Close()
+			}
 			continue
 		} else {
 			break
