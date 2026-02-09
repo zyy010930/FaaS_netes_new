@@ -21,7 +21,7 @@ import (
 
 // MaxReplicas licensed for OpenFaaS CE is 5/5
 // a license for OpenFaaS Standard is required to increase this limit.
-const MaxReplicas = 5
+const MaxReplicas = 30
 
 // MaxFunctions licensed for OpenFaaS CE is 30
 // a license for OpenFaaS Standard is required to increase this limit.
@@ -37,7 +37,7 @@ func MakeReplicaReader(defaultNamespace string, lister v1.DeploymentLister) http
 		if functionName == "func2-ms" || functionName == "func3-ms" {
 			functionName = "multi-func-pod"
 		}
-		
+
 		q := r.URL.Query()
 		namespace := q.Get("namespace")
 
