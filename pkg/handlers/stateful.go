@@ -160,7 +160,8 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	//response, err := proxyClient.Do(proxyReq.WithContext(ctx))
 	// 处理429状态码：需要重试
 	var response *http.Response
-	for {
+	maxTime := 100
+	for i := 0; i < maxTime; i++ {
 		// 关键：每次重试前重置 Body 和 Content-Length
 		if len(reqBodyBytes) > 0 {
 			// 重新封装 Body（可多次读取）
