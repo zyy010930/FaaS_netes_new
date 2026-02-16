@@ -104,13 +104,28 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 
 	// 2. 从状态管理器筛选空闲实例
 	idleInstances := l.instanceManager.ListIdleInstances(functionName, namespace)
+	//比较状态管理器中的实例
+	var idleList []*FunctionInstance
+	flag := false
+	for _, instance := range idleInstances {
+		log.Printf("Found idle instance %s for function %s", instance.PodIP, functionName)
+		idleList = append(idleList, instance)
+		if instance.PodIP == svc.Subsets[0].Addresses[0].IP {
+			flag = true
+		}
+	}
 
 	// 2.0 无空闲实例：添加所有实例
-	if len(idleInstances) == 0 {
+	if flag == false || len(idleInstances) == 0 {
 		log.Printf("No idle instances found for function %s", functionName)
 		for i := 0; i < len(svc.Subsets[0].Addresses); i++ {
 			ip := svc.Subsets[0].Addresses[i].IP
 			l.instanceManager.AddInstance(functionName, namespace, ip)
+		}
+		// 删除旧实例
+		for _, instance := range idleList {
+			log.Printf("remove instance %s for function %s", instance.PodIP, functionName)
+			l.instanceManager.RemoveInstance(functionName, namespace, instance.PodIP)
 		}
 	}
 	var targetIP string
