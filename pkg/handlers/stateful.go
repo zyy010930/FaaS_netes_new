@@ -188,9 +188,6 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
 				return
 			}
-			if proxyReq.Body != nil {
-				proxyReq.Body.Close()
-			}
 
 			continue
 		} else if response.StatusCode == http.StatusTooManyRequests {
