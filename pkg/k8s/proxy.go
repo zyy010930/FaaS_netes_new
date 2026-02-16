@@ -129,7 +129,7 @@ func (l *FunctionLookup) Resolve(name string) (url.URL, error) {
 		}
 	}
 	var targetIP string
-	if len(idleInstances) > 0 {
+	if flag != false && len(idleInstances) > 0 {
 		// 2.1 有空闲实例：随机选一个
 		targetIdx := rand.Intn(len(idleInstances))
 		targetIP = idleInstances[targetIdx].PodIP
