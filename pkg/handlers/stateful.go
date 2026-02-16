@@ -162,26 +162,42 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	var response *http.Response
 	maxTime := 100
 	for i := 0; i < maxTime; i++ {
-		// 关键：每次重试前重置 Body 和 Content-Length
-		if len(reqBodyBytes) > 0 {
-			// 重新封装 Body（可多次读取）
-			proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
-			// 恢复 Content-Length 头（关键！）
-			proxyReq.ContentLength = int64(len(reqBodyBytes))
-			proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
-		}
-
 		response, err = proxyClient.Do(proxyReq.WithContext(ctx))
 		log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
 		if response == nil {
 			log.Printf("response is nil\n")
 			time.Sleep(100 * time.Millisecond)
+			//新增更新时重置，避免实例更新后请求失败
+			functionAddr, resolveErr = resolver.Resolve(functionName)
+			if resolveErr != nil {
+				// TODO: Should record the 404/not found error in Prometheus.
+				log.Printf("resolver error: no endpoints for %s: %s\n", functionName, resolveErr.Error())
+				httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
+				return
+			}
+			proxyReq, err := buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+			if err != nil {
+				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+				return
+			}
+			if proxyReq.Body != nil {
+				proxyReq.Body.Close()
+			}
+
 			continue
 		} else if response.StatusCode == http.StatusTooManyRequests {
 			log.Printf("function: %s too many requests\n", functionName)
 			time.Sleep(100 * time.Millisecond)
 			if response.Body != nil {
 				_ = response.Body.Close()
+			}
+			// 关键：每次重试前重置 Body 和 Content-Length
+			if len(reqBodyBytes) > 0 {
+				// 重新封装 Body（可多次读取）
+				proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+				// 恢复 Content-Length 头（关键！）
+				proxyReq.ContentLength = int64(len(reqBodyBytes))
+				proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
 			}
 			continue
 		} else {
