@@ -117,10 +117,6 @@ func NewProxyClient(timeout time.Duration, maxIdleConns int, maxIdleConnsPerHost
 // proxyRequest handles the actual resolution of and then request to the function service.
 func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient *http.Client, resolver BaseURLResolver) {
 	//ctx := originalReq.Context()
-	// ===== 关键修改1：创建独立的重试上下文，脱离原始请求的ctx =====
-	// 为重试创建新的上下文，设置总超时（比如10秒），避免复用已取消的originalReq.Context()
-	retryCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel() // 确保最终释放上下文
 
 	pathVars := mux.Vars(originalReq)
 	functionName := pathVars["name"]
@@ -176,7 +172,10 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 			proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
 		}
 		//response, err = proxyClient.Do(proxyReq.WithContext(ctx))
-		response, err = proxyClient.Do(proxyReq.WithContext(retryCtx))
+		// 单次请求超时（比如 5 秒），避免累积超时
+		requestCtx, requestCancel := context.WithTimeout(context.Background(), proxyClient.Timeout)
+		response, err = proxyClient.Do(proxyReq.WithContext(requestCtx))
+		requestCancel() // 立即取消，释放资源
 
 		log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
 		if response == nil {
