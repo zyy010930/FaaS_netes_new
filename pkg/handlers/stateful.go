@@ -162,6 +162,14 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	var response *http.Response
 	maxTime := 100
 	for i := 0; i < maxTime; i++ {
+		// 关键：每次重试前重置 Body 和 Content-Length
+		if len(reqBodyBytes) > 0 {
+			// 重新封装 Body（可多次读取）
+			proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+			// 恢复 Content-Length 头（关键！）
+			proxyReq.ContentLength = int64(len(reqBodyBytes))
+			proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
+		}
 		response, err = proxyClient.Do(proxyReq.WithContext(ctx))
 		log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
 		if response == nil {
@@ -190,14 +198,6 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 			time.Sleep(100 * time.Millisecond)
 			if response.Body != nil {
 				_ = response.Body.Close()
-			}
-			// 关键：每次重试前重置 Body 和 Content-Length
-			if len(reqBodyBytes) > 0 {
-				// 重新封装 Body（可多次读取）
-				proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
-				// 恢复 Content-Length 头（关键！）
-				proxyReq.ContentLength = int64(len(reqBodyBytes))
-				proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
 			}
 			continue
 		} else {
