@@ -175,7 +175,7 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 				httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
 				return
 			}
-			proxyReq, err := buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+			proxyReq, err = buildProxyRequest(originalReq, functionAddr, pathVars["params"])
 			if err != nil {
 				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
 				return
