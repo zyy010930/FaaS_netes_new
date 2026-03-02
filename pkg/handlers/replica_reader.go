@@ -38,7 +38,7 @@ func MakeReplicaReader(defaultNamespace string, lister v1.DeploymentLister) http
 			functionName = "multi-func-pod"
 		}
 
-		if functionName == "video-gif-ware" || functionName == "audio-convert-ware" {
+		if functionName == "video-gif-ware" || functionName == "video-sprites-ware" || functionName == "video-watermark-ware" || functionName == "audio-convert-ware" {
 			functionName = "video-ware"
 		}
 
