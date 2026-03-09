@@ -42,6 +42,10 @@ func MakeReplicaReader(defaultNamespace string, lister v1.DeploymentLister) http
 			functionName = "video-ware"
 		}
 
+		if functionName == "upload-ware" || functionName == "upload-end-ware" || functionName == "compose-post-ware" || functionName == "compose-and-upload-ware" || functionName == "social-gateway" {
+			functionName = "social-ware"
+		}
+
 		q := r.URL.Query()
 		namespace := q.Get("namespace")
 
