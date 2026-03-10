@@ -220,6 +220,15 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	if response.Body != nil {
 		defer response.Body.Close()
 	}
+	
+	// ===== 3. 核心修复：先完整读取响应体到缓存，再处理业务逻辑 =====
+	// 读取全部响应体到内存，避免后续操作阻塞导致Body失效
+	respBodyBytes, readErr := io.ReadAll(response.Body)
+	if readErr != nil {
+		log.Printf("failed to read response body from %s: %s", functionName, readErr.Error())
+		httputil.Errorf(w, http.StatusInternalServerError, "Failed to read service response: %s.", functionName)
+		return
+	}
 
 	// 5. 重置状态为Idle（无论成功/失败）
 	namespace := "openfaas-fn"
@@ -228,13 +237,32 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 
 	log.Printf("%s took %f seconds\n", functionName, seconds.Seconds())
 
+	//clientHeader := w.Header()
+	//copyHeaders(clientHeader, &response.Header)
+	//w.Header().Set("Content-Type", getContentType(originalReq.Header, response.Header))
+	//
+	//w.WriteHeader(response.StatusCode)
+	//if response.Body != nil {
+	//	io.Copy(w, response.Body)
+	//}
+	// ===== 5. 转发缓存的响应体（关键：确保完整传输）=====
+	// 复制响应头
 	clientHeader := w.Header()
 	copyHeaders(clientHeader, &response.Header)
-	w.Header().Set("Content-Type", getContentType(originalReq.Header, response.Header))
+	// 强制设置正确的Content-Length（匹配实际缓存的字节数）
+	clientHeader.Set("Content-Length", strconv.Itoa(len(respBodyBytes)))
+	clientHeader.Set("Content-Type", getContentType(originalReq.Header, response.Header))
 
+	// 写入状态码和完整响应体
 	w.WriteHeader(response.StatusCode)
-	if response.Body != nil {
-		io.Copy(w, response.Body)
+	// 检查写入结果，确保字节全部传输
+	if len(respBodyBytes) > 0 {
+		n, writeErr := w.Write(respBodyBytes)
+		if writeErr != nil {
+			log.Printf("failed to write response body to client: %s", writeErr.Error())
+		} else if n != len(respBodyBytes) {
+			log.Printf("incomplete write: sent %d bytes, expected %d", n, len(respBodyBytes))
+		}
 	}
 }
 
