@@ -115,9 +115,150 @@ func NewProxyClient(timeout time.Duration, maxIdleConns int, maxIdleConnsPerHost
 }
 
 // proxyRequest handles the actual resolution of and then request to the function service.
+//
+//	func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient *http.Client, resolver BaseURLResolver) {
+//		//ctx := originalReq.Context()
+//
+//		pathVars := mux.Vars(originalReq)
+//		functionName := pathVars["name"]
+//		if functionName == "" {
+//			httputil.Errorf(w, http.StatusBadRequest, "Provide function name in the request path")
+//			return
+//		}
+//
+//		functionAddr, resolveErr := resolver.Resolve(functionName)
+//		if resolveErr != nil {
+//			// TODO: Should record the 404/not found error in Prometheus.
+//			log.Printf("resolver error: no endpoints for %s: %s\n", functionName, resolveErr.Error())
+//			httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
+//			return
+//		}
+//
+//		// ===== 新增：读取原始 Body 并保存 =====
+//		var reqBodyBytes []byte
+//		var reqBodyErr error
+//		// 读取 originalReq.Body 的内容（仅读取一次，保存为字节数组）
+//		if originalReq.Body != nil {
+//			reqBodyBytes, reqBodyErr = io.ReadAll(originalReq.Body)
+//			if reqBodyErr != nil {
+//				httputil.Errorf(w, http.StatusInternalServerError, "Failed to read request body: %s", functionName)
+//				return
+//			}
+//			// 恢复 originalReq.Body（避免后续使用时为空）
+//			originalReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+//		}
+//
+//		proxyReq, err := buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+//		if err != nil {
+//			httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+//			return
+//		}
+//
+//		if proxyReq.Body != nil {
+//			defer proxyReq.Body.Close()
+//		}
+//
+//		start := time.Now()
+//		//response, err := proxyClient.Do(proxyReq.WithContext(ctx))
+//		// 处理429状态码：需要重试
+//		var response *http.Response
+//		maxTime := 100
+//		for i := 0; i < maxTime; i++ {
+//			// 关键：每次重试前重置 Body 和 Content-Length
+//			if len(reqBodyBytes) > 0 {
+//				// 重新封装 Body（可多次读取）
+//				proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+//				// 恢复 Content-Length 头（关键！）
+//				proxyReq.ContentLength = int64(len(reqBodyBytes))
+//				proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
+//			}
+//			//response, err = proxyClient.Do(proxyReq.WithContext(ctx))
+//			// 单次请求超时（比如 5 秒），避免累积超时
+//			requestCtx, requestCancel := context.WithTimeout(context.Background(), proxyClient.Timeout)
+//			response, err = proxyClient.Do(proxyReq.WithContext(requestCtx))
+//			requestCancel() // 立即取消，释放资源
+//
+//			log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
+//			if response == nil {
+//				log.Printf("response is nil\n")
+//				time.Sleep(100 * time.Millisecond)
+//				//新增更新时重置，避免实例更新后请求失败
+//				functionAddr, resolveErr = resolver.Resolve(functionName)
+//				if resolveErr != nil {
+//					// TODO: Should record the 404/not found error in Prometheus.
+//					log.Printf("resolver error: no endpoints for %s: %s\n", functionName, resolveErr.Error())
+//					httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
+//					return
+//				}
+//				proxyReq, err = buildProxyRequest(originalReq, functionAddr, pathVars["params"])
+//				if err != nil {
+//					httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+//					return
+//				}
+//
+//				continue
+//			} else if response.StatusCode == http.StatusTooManyRequests {
+//				log.Printf("function: %s too many requests\n", functionName)
+//				time.Sleep(100 * time.Millisecond)
+//				if response.Body != nil {
+//					_ = response.Body.Close()
+//				}
+//				continue
+//			} else {
+//				break
+//			}
+//		}
+//
+//		seconds := time.Since(start)
+//
+//		if err != nil {
+//			log.Printf("error with proxy request to: %s, %s\n", proxyReq.URL.String(), err.Error())
+//
+//			httputil.Errorf(w, http.StatusInternalServerError, "Can't reach service for: %s.", functionName)
+//			return
+//		}
+//
+//		if response.Body != nil {
+//			defer response.Body.Close()
+//		}
+//
+//
+//		// 5. 重置状态为Idle（无论成功/失败）
+//		namespace := "openfaas-fn"
+//		podIP := strings.Split(functionAddr.Host, ":")[0]
+//		k8s.GlobalInstanceManager.UpdateInstanceState(functionName, namespace, podIP, "idle")
+//
+//		log.Printf("%s took %f seconds\n", functionName, seconds.Seconds())
+//
+//		clientHeader := w.Header()
+//		copyHeaders(clientHeader, &response.Header)
+//		w.Header().Set("Content-Type", getContentType(originalReq.Header, response.Header))
+//
+//		w.WriteHeader(response.StatusCode)
+//		if response.Body != nil {
+//			io.Copy(w, response.Body)
+//		}
+//		//// ===== 5. 转发缓存的响应体（关键：确保完整传输）=====
+//		//// 复制响应头
+//		//clientHeader := w.Header()
+//		//copyHeaders(clientHeader, &response.Header)
+//		//// 强制设置正确的Content-Length（匹配实际缓存的字节数）
+//		//clientHeader.Set("Content-Length", strconv.Itoa(len(respBodyBytes)))
+//		//clientHeader.Set("Content-Type", getContentType(originalReq.Header, response.Header))
+//		//
+//		//// 写入状态码和完整响应体
+//		//w.WriteHeader(response.StatusCode)
+//		//// 检查写入结果，确保字节全部传输
+//		//if len(respBodyBytes) > 0 {
+//		//	n, writeErr := w.Write(respBodyBytes)
+//		//	if writeErr != nil {
+//		//		log.Printf("failed to write response body to client: %s", writeErr.Error())
+//		//	} else if n != len(respBodyBytes) {
+//		//		log.Printf("incomplete write: sent %d bytes, expected %d", n, len(respBodyBytes))
+//		//	}
+//		//}
+//	}
 func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient *http.Client, resolver BaseURLResolver) {
-	//ctx := originalReq.Context()
-
 	pathVars := mux.Vars(originalReq)
 	functionName := pathVars["name"]
 	if functionName == "" {
@@ -125,144 +266,131 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 		return
 	}
 
+	// ===== 1. 解析目标地址 =====
 	functionAddr, resolveErr := resolver.Resolve(functionName)
 	if resolveErr != nil {
-		// TODO: Should record the 404/not found error in Prometheus.
 		log.Printf("resolver error: no endpoints for %s: %s\n", functionName, resolveErr.Error())
 		httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
 		return
 	}
 
-	// ===== 新增：读取原始 Body 并保存 =====
+	// ===== 2. 读取并缓存原始请求体 =====
 	var reqBodyBytes []byte
-	var reqBodyErr error
-	// 读取 originalReq.Body 的内容（仅读取一次，保存为字节数组）
 	if originalReq.Body != nil {
+		var reqBodyErr error
 		reqBodyBytes, reqBodyErr = io.ReadAll(originalReq.Body)
 		if reqBodyErr != nil {
-			httputil.Errorf(w, http.StatusInternalServerError, "Failed to read request body: %s", functionName)
+			httputil.Errorf(w, http.StatusInternalServerError, "Failed to read request body: %s", reqBodyErr.Error())
 			return
 		}
-		// 恢复 originalReq.Body（避免后续使用时为空）
 		originalReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
 	}
 
+	// ===== 3. 构建初始代理请求 =====
 	proxyReq, err := buildProxyRequest(originalReq, functionAddr, pathVars["params"])
 	if err != nil {
-		httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+		httputil.Errorf(w, http.StatusInternalServerError, "Failed to build proxy request: %s", err.Error())
 		return
 	}
 
-	if proxyReq.Body != nil {
-		defer proxyReq.Body.Close()
-	}
-
 	start := time.Now()
-	//response, err := proxyClient.Do(proxyReq.WithContext(ctx))
-	// 处理429状态码：需要重试
-	var response *http.Response
-	maxTime := 100
-	for i := 0; i < maxTime; i++ {
-		// 关键：每次重试前重置 Body 和 Content-Length
+	var (
+		finalResponse *http.Response
+		respBodyBytes []byte
+		reqErr        error
+	)
+
+	// ===== 4. 重构重试逻辑：避免上下文提前取消 =====
+	maxRetries := 100
+	retryDelay := 100 * time.Millisecond
+	for i := 0; i < maxRetries; i++ {
+		// 重置请求体（重试必备）
 		if len(reqBodyBytes) > 0 {
-			// 重新封装 Body（可多次读取）
 			proxyReq.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
-			// 恢复 Content-Length 头（关键！）
 			proxyReq.ContentLength = int64(len(reqBodyBytes))
 			proxyReq.Header.Set("Content-Length", strconv.Itoa(len(reqBodyBytes)))
 		}
-		//response, err = proxyClient.Do(proxyReq.WithContext(ctx))
-		// 单次请求超时（比如 5 秒），避免累积超时
-		requestCtx, requestCancel := context.WithTimeout(context.Background(), proxyClient.Timeout)
-		response, err = proxyClient.Do(proxyReq.WithContext(requestCtx))
-		requestCancel() // 立即取消，释放资源
 
-		log.Printf("response: %s, proxyReq: %s\n, err: %s", response, proxyReq, err)
-		if response == nil {
-			log.Printf("response is nil\n")
-			time.Sleep(100 * time.Millisecond)
-			//新增更新时重置，避免实例更新后请求失败
+		// 关键：创建独立的上下文，仅用于本次请求，且延迟取消
+		reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer reqCancel() // 延迟取消：直到当前重试迭代结束/函数退出
+
+		// 发送请求
+		response, err := proxyClient.Do(proxyReq.WithContext(reqCtx))
+		if err != nil {
+			log.Printf("retry %d: request to %s failed: %v", i, functionAddr, err)
+			reqCancel() // 失败时立即取消
+			time.Sleep(retryDelay)
+			// 重新解析地址（防止实例变更）
 			functionAddr, resolveErr = resolver.Resolve(functionName)
 			if resolveErr != nil {
-				// TODO: Should record the 404/not found error in Prometheus.
-				log.Printf("resolver error: no endpoints for %s: %s\n", functionName, resolveErr.Error())
 				httputil.Errorf(w, http.StatusServiceUnavailable, "No endpoints available for: %s.", functionName)
 				return
 			}
 			proxyReq, err = buildProxyRequest(originalReq, functionAddr, pathVars["params"])
 			if err != nil {
-				httputil.Errorf(w, http.StatusInternalServerError, "Failed to resolve service: %s.", functionName)
+				httputil.Errorf(w, http.StatusInternalServerError, "Failed to rebuild proxy request: %s", err.Error())
 				return
 			}
+			continue
+		}
 
+		// ===== 5. 读取响应体（在上下文取消前完成）=====
+		// 此时reqCtx未取消，可安全读取
+		bodyBytes, readErr := io.ReadAll(response.Body)
+		response.Body.Close() // 立即关闭原始Body，释放连接
+		if readErr != nil {
+			log.Printf("retry %d: read response body failed: %v", i, readErr)
+			reqCancel() // 读取失败取消上下文
+			time.Sleep(retryDelay)
 			continue
-		} else if response.StatusCode == http.StatusTooManyRequests {
-			log.Printf("function: %s too many requests\n", functionName)
-			time.Sleep(100 * time.Millisecond)
-			if response.Body != nil {
-				_ = response.Body.Close()
-			}
-			continue
-		} else {
+		}
+
+		// 非429错误：退出重试
+		if response.StatusCode != http.StatusTooManyRequests {
+			finalResponse = response
+			respBodyBytes = bodyBytes
+			reqCancel() // 读取完成后取消上下文
 			break
 		}
+
+		// 429错误：重试
+		log.Printf("retry %d: %s too many requests (429)", i, functionName)
+		reqCancel() // 取消上下文
+		time.Sleep(retryDelay)
+		finalResponse = nil
+		respBodyBytes = nil
 	}
 
-	seconds := time.Since(start)
-
-	if err != nil {
-		log.Printf("error with proxy request to: %s, %s\n", proxyReq.URL.String(), err.Error())
-
+	// ===== 6. 最终错误检查 =====
+	if finalResponse == nil || reqErr != nil || len(respBodyBytes) == 0 {
+		log.Printf("all retries failed for %s", functionName)
 		httputil.Errorf(w, http.StatusInternalServerError, "Can't reach service for: %s.", functionName)
 		return
 	}
 
-	if response.Body != nil {
-		defer response.Body.Close()
-	}
+	// ===== 7. 业务逻辑（异步执行，避免阻塞响应）=====
+	go func() {
+		seconds := time.Since(start)
+		namespace := "openfaas-fn"
+		podIP := strings.Split(functionAddr.Host, ":")[0]
+		k8s.GlobalInstanceManager.UpdateInstanceState(functionName, namespace, podIP, "idle")
+		log.Printf("%s took %f seconds\n", functionName, seconds.Seconds())
+	}()
 
-	// ===== 3. 核心修复：先完整读取响应体到缓存，再处理业务逻辑 =====
-	// 读取全部响应体到内存，避免后续操作阻塞导致Body失效
-	respBodyBytes, readErr := io.ReadAll(response.Body)
-	if readErr != nil {
-		log.Printf("failed to read response body from %s: %s", functionName, readErr.Error())
-		httputil.Errorf(w, http.StatusInternalServerError, "Failed to read service response: %s.", functionName)
-		return
-	}
+	// ===== 8. 转发完整响应给客户端 =====
+	// 复制响应头（覆盖Content-Length为实际读取的字节数）
+	copyHeaders(w.Header(), &finalResponse.Header)
+	w.Header().Set("Content-Length", strconv.Itoa(len(respBodyBytes)))
+	w.Header().Set("Content-Type", getContentType(originalReq.Header, finalResponse.Header))
 
-	// 5. 重置状态为Idle（无论成功/失败）
-	namespace := "openfaas-fn"
-	podIP := strings.Split(functionAddr.Host, ":")[0]
-	k8s.GlobalInstanceManager.UpdateInstanceState(functionName, namespace, podIP, "idle")
-
-	log.Printf("%s took %f seconds\n", functionName, seconds.Seconds())
-
-	//clientHeader := w.Header()
-	//copyHeaders(clientHeader, &response.Header)
-	//w.Header().Set("Content-Type", getContentType(originalReq.Header, response.Header))
-	//
-	//w.WriteHeader(response.StatusCode)
-	//if response.Body != nil {
-	//	io.Copy(w, response.Body)
-	//}
-	// ===== 5. 转发缓存的响应体（关键：确保完整传输）=====
-	// 复制响应头
-	clientHeader := w.Header()
-	copyHeaders(clientHeader, &response.Header)
-	// 强制设置正确的Content-Length（匹配实际缓存的字节数）
-	clientHeader.Set("Content-Length", strconv.Itoa(len(respBodyBytes)))
-	clientHeader.Set("Content-Type", getContentType(originalReq.Header, response.Header))
-
-	// 写入状态码和完整响应体
-	w.WriteHeader(response.StatusCode)
-	// 检查写入结果，确保字节全部传输
-	if len(respBodyBytes) > 0 {
-		n, writeErr := w.Write(respBodyBytes)
-		if writeErr != nil {
-			log.Printf("failed to write response body to client: %s", writeErr.Error())
-		} else if n != len(respBodyBytes) {
-			log.Printf("incomplete write: sent %d bytes, expected %d", n, len(respBodyBytes))
-		}
+	// 写入状态码和响应体
+	w.WriteHeader(finalResponse.StatusCode)
+	n, writeErr := w.Write(respBodyBytes)
+	if writeErr != nil {
+		log.Printf("failed to write response to client: %v", writeErr)
+	} else if n != len(respBodyBytes) {
+		log.Printf("incomplete write: sent %d bytes, expected %d", n, len(respBodyBytes))
 	}
 }
 
