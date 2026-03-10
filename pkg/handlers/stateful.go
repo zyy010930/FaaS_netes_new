@@ -220,7 +220,7 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 	if response.Body != nil {
 		defer response.Body.Close()
 	}
-	
+
 	// ===== 3. 核心修复：先完整读取响应体到缓存，再处理业务逻辑 =====
 	// 读取全部响应体到内存，避免后续操作阻塞导致Body失效
 	respBodyBytes, readErr := io.ReadAll(response.Body)
