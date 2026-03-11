@@ -312,7 +312,7 @@ func proxyRequest(w http.ResponseWriter, originalReq *http.Request, proxyClient 
 		}
 
 		// 关键：创建独立的上下文，仅用于本次请求，且延迟取消
-		reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		reqCtx, reqCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer reqCancel() // 延迟取消：直到当前重试迭代结束/函数退出
 
 		// 发送请求
